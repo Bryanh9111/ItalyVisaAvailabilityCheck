@@ -15,7 +15,7 @@ from dateutil.relativedelta import relativedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 # Importing configurations
-from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_CHANNEL
+from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_COOKIE_CHANNEL, REDIS_TIME_CHANNEL
 from config import FILE_PATH, FILE_NAME_PREFIX, DELETE_FILE_IN_DAYS
 from config import API_URL, USER_AGENT, SERVICE_ID, NUM_MONTHS_TO_FETCH, API_SCHEDULE
 from config import EMAIL_SERVER, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD, RECIPIENTS
@@ -35,9 +35,10 @@ class VisaAvailability:
         self.emailLocal = EmailLocal(email_server, email_port, email_user, email_password, recipient_emails)
         self.exceptionLst = []
         #self.session = requests.Session()
-
-        self.redis_receiver = RedisReceiver()
-        self.redis_channel = REDIS_CHANNEL
+        self.next_run_time_str = ''
+        self.redisSvc = RedisSvc()
+        self.redis_cookie_channel = REDIS_COOKIE_CHANNEL
+        self.redis_time_channel = REDIS_TIME_CHANNEL
         # Start a new thread to listen to the Redis channel for messages
         self.redis_thread = threading.Thread(target=self.update_cookie_from_redis)
         self.redis_thread.daemon = True
@@ -50,15 +51,22 @@ class VisaAvailability:
     def update_cookie_from_redis(self):
         try:
             while True:
-                message = self.redis_receiver.receive_message(self.redis_channel)
+                message = self.redisSvc.receive_message(self.redis_cookie_channel)
                 if message:
                     cookie = message.get('cookie')
+                    next_run_time = message.get('next_run_time')
                     #cookie = cookie.decode('utf-8')
                     if cookie:
                         print('Cookie received!!!!')
                         if(cookie == '-1'):
                             print(f'Cookie: {cookie}')
                         self.headers['Cookie'] = '' if cookie == '-1' else cookie
+
+                    if next_run_time:
+                        print(f'Next_run_time received: {next_run_time}')
+                        self.next_run_time_str = next_run_time
+                    else:
+                        self.next_run_time_str = ''
         except Exception as e:
             print(f"An error occurred while update_cookie_from_redis: {e}")
             self.logger.error(f"An error occurred while update_cookie_from_redis: {e}")
@@ -104,6 +112,13 @@ class VisaAvailability:
                 date_object = datetime.strptime(date_string, "%Y-%m-%d")
                 year = date_object.year
                 month = date_object.month
+                #######test exception#######
+                # next_run_time_selenium = datetime.strptime(self.next_run_time_str, "%Y-%m-%d %H:%M:%S")
+                # current_time = datetime.now()
+                # time_difference = next_run_time_selenium - current_time
+                # if time_difference > timedelta(minutes=8) and time_difference < timedelta(minutes=10):
+                #     self.headers['Cookie'] = ''
+                #######
                 result = requests.post(self.url, params=param, headers=self.headers).text
                 #result = self.session.post(self.url, params=param, headers=self.headers).text
                 resultJson = json.loads(result)
@@ -132,9 +147,13 @@ class VisaAvailability:
                 self.logger.error(f"An error occurred while get_availability: {e}")
                 self.exceptionLst.append(f"An error occurred while get_availability: {e}")
                 self.headers['Cookie'] = ''
-
-        # for key, value in self.memo.items():
-        #     print(f"{key}: {value}")
+                # publish an event in another channel to selenium bot
+                if self.next_run_time_str:
+                    next_run_time_selenium = datetime.strptime(self.next_run_time_str, "%Y-%m-%d %H:%M:%S")
+                    current_time = datetime.now()
+                    time_difference = next_run_time_selenium - current_time
+                    if time_difference > timedelta(minutes=5):
+                        self.redisSvc.send_message(self.redis_time_channel, {'run': 1})
 
         if(len(messageLst) > 0):
             message = "\n".join(messageLst)
@@ -209,16 +228,8 @@ class EmailLocal:
             print(f"An error occurred while sending email: {e}")
             self.logger.error(f"An error occurred while sending email: {e}")
 
-    def send_status_email(self):
-        try:
-            message = "The code is running properly."
-            self.send_email(message)
-        except Exception as e:
-            print(f"An error occurred while send_status_email: {e}")
-            self.logger.error(f"An error occurred while send_status_email: {e}")
 
-
-class RedisReceiver:
+class RedisSvc:
     # Initialize RedisReceiver
     def __init__(self, host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
@@ -229,7 +240,17 @@ class RedisReceiver:
             print("Cannot connect to Redis server. Please make sure the server is running and the host and port are correct.")
             self.logger.error(f"An error occurred: {e}")
 
-    # Subscribe to a channel to receive message
+    # Publisher
+    def send_message(self, channel, message):
+        try:
+            message_json = json.dumps(message)
+            self.r.publish(channel, message_json)
+        except redis.RedisError as e:
+            print(f"An error occurred when publishing a message: {e}")
+            self.logger.error(f"An error occurred when publishing a message: {e}")
+            raise
+
+    # Subscriber
     def receive_message(self, channel):
         try:
             pubsub = self.r.pubsub()

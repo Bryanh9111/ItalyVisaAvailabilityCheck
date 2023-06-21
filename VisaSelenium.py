@@ -6,6 +6,7 @@ import redis
 import json
 import logging
 import random
+import threading
 from requests.exceptions import RequestException, Timeout
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -16,7 +17,7 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException,
 from selenium.webdriver.common.alert import Alert
 from datetime import datetime, timedelta, date
 # Importing configurations
-from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_CHANNEL
+from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_COOKIE_CHANNEL, REDIS_TIME_CHANNEL
 from config import FILE_PATH_SELENIUM, FILE_NAME_PREFIX_SELENIUM
 from config import CHROME_DRIVER_PATH
 from config import NAVIGATION_URL, USER_NAME, PASSWORD
@@ -101,7 +102,11 @@ class BrowserAutomator:
     #Close the browser instance connection
     def close_browser(self, seconds):
         time.sleep(20)
-        self.driver.quit()
+        try:
+            self.driver.quit()
+        except Exception as e:
+            print(f"An error occurred while close_browser: {e}")
+            self.logger.error(f"An error occurred while close_browser: {e}")
 
     #Get all the cookies from request header
     def get_all_cookies(self):
@@ -131,7 +136,7 @@ class APIClient:
         return response.cookies
 
 
-class RedisPublisher:
+class RedisSvc:
     # Initialize RedisPublisher
     def __init__(self, host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
@@ -153,14 +158,54 @@ class RedisPublisher:
             self.logger.error(f"An error occurred when publishing a message: {e}")
             raise
 
+    # Subscriber
+    def receive_message(self, channel):
+        try:
+            pubsub = self.r.pubsub()
+            pubsub.subscribe(channel)
+
+            while True:
+                message = pubsub.get_message()
+                if message and message['type'] == 'message':
+                    message_data = json.loads(message['data'])
+                    # print(f"Received message: {message_data}")
+                    return message_data
+                else:
+                    time.sleep(1)
+        except redis.RedisError as e:
+            print(f"An error occurred when receiving a message: {e}")
+            self.logger.error(f"An error occurred when receiving a message: {e}")
+            raise
+
 
 class ScheduleJob:
     # Initialize ScheduleJob with chromedriver
-    def __init__(self, redis_publisher: RedisPublisher, driver_path):
+    def __init__(self, redisSvc: RedisSvc, driver_path):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         #self.browser = browser
-        self.redis_publisher = redis_publisher
+        self.redisSvc = redisSvc
         self.driver_path = driver_path
+        # Start a new thread to listen to the Redis channel for messages
+        self.redis_thread = threading.Thread(target=self.checkTrigger)
+        self.redis_thread.daemon = True
+        self.redis_thread.start()
+
+    # Redis Subscriber to run job
+    def checkTrigger(self):
+        try:
+            while True:
+                message = self.redisSvc.receive_message(REDIS_TIME_CHANNEL)
+                if message:
+                    need_to_run = message.get('run')
+                    if need_to_run:
+                        print('Received run flag, running job immediately!!!!')
+                        if self.browser:
+                            self.browser.close_browser(1)
+                        schedule.clear()  # Clear the current schedule
+                        self.run()  # Run the schedule again
+        except Exception as e:
+            print(f"An error occurred while checkTrigger: {e}")
+            self.logger.error(f"An error occurred while checkTrigger: {e}")
 
     # Create web automation job for running
     def job(self, interval):
@@ -175,23 +220,25 @@ class ScheduleJob:
             self.browser.check_checkbox(By.ID, 'PrivacyCheck', 80, clickEnter=True)
             self.browser.accept_alert()
             cookies = self.browser.get_all_cookies()
+            next_run_time = (datetime.now() + timedelta(minutes=interval) + timedelta(seconds=20)).strftime("%Y-%m-%d %H:%M:%S")
             if (len(cookies) > 0):
                 cookie_to_send = "; ".join([f'{cookie["name"]}={cookie["value"]}' for cookie in reversed(cookies)])
                 cookie_to_send = cookie_to_send.strip()
-                self.redis_publisher.send_message(REDIS_CHANNEL, {'cookie': cookie_to_send})
+                self.redisSvc.send_message(REDIS_COOKIE_CHANNEL, {'cookie': cookie_to_send, 'next_run_time': next_run_time})
             else:
-                self.redis_publisher.send_message('visa_channel', {'cookie': '-1'})
+                self.redisSvc.send_message(REDIS_COOKIE_CHANNEL, {'cookie': '-1'})
 
-            print(f'next run time: {datetime.now() + timedelta(minutes=interval) + timedelta(seconds=15)}')
-            self.browser.close_browser(15)
+            print(f'next run time: {next_run_time}')
+            self.browser.close_browser(5)
         except Exception as e:
             print(f"An error occurred while running job: {e}")
             self.logger.error(f"An error occurred while running job: {e}")
-            self.redis_publisher.send_message(REDIS_CHANNEL, {'cookie': '-1'})
+            self.redisSvc.send_message(REDIS_COOKIE_CHANNEL, {'cookie': '-1'})
             if self.browser:
-                self.browser.close_browser(10)
-            time.sleep(60)
-            self.run()
+                self.browser.close_browser(5)
+            time.sleep(120)
+            schedule.clear()  # Clear the current schedule
+            self.run()  # Run the schedule again
 
     # running the job in a timely manner
     def run(self):
@@ -201,7 +248,11 @@ class ScheduleJob:
         #schedule.every(interval).minutes.do(self.job)
         schedule.every(interval).minutes.do(lambda: self.job(interval))
         while True:
-            schedule.run_pending()
+            try:
+                schedule.run_pending()
+            except Exception as e:
+                print(f"An error occurred while running schedule: {e}")
+                self.logger.error(f"An error occurred while running schedule: {e}")
             time.sleep(1)
 
 
@@ -219,10 +270,10 @@ if __name__ == "__main__":
     #browser = BrowserAutomator(CHROME_DRIVER_PATH)
 
     # Create an instance of RedisPublisher
-    redis_publisher = RedisPublisher()
+    redisSvc = RedisSvc()
 
     # Create an instance of ScheduleJob
-    scheduled_job = ScheduleJob(redis_publisher, CHROME_DRIVER_PATH)
+    scheduled_job = ScheduleJob(redisSvc, CHROME_DRIVER_PATH)
 
     # Run the scheduled job
     scheduled_job.run()

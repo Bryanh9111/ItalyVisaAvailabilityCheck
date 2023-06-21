@@ -13,7 +13,8 @@ CREDENTIALS = load_credentials()
 REDIS_HOST = 'localhost'
 REDIS_PORT = 6379
 REDIS_DB = 0
-REDIS_CHANNEL = 'visa_channel'
+REDIS_COOKIE_CHANNEL = 'visa_cookie_channel'
+REDIS_TIME_CHANNEL = 'visa_time_channel'
 
 #File configs
 FILE_PATH = r'C:\Users\zhhlb\OneDrive\桌面'

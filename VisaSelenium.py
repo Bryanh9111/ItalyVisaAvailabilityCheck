@@ -195,8 +195,8 @@ class ScheduleJob:
 
     # running the job in a timely manner
     def run(self):
-        #generate a randon interval between 20 - 25
-        interval = random.randint(20, 25)
+        #generate a randon interval
+        interval = random.randint(15, 20)
         self.job(interval)
         #schedule.every(interval).minutes.do(self.job)
         schedule.every(interval).minutes.do(lambda: self.job(interval))

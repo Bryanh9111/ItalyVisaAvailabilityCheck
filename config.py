@@ -12,9 +12,9 @@ FILE_NAME_PREFIX = 'VisaDates'
 DELETE_FILE_IN_DAYS = 1
 
 #Email configs
-EMAIL_SERVER = "smtp-mail.outlook.com"  # SMTP server
+EMAIL_SERVER = 'smtp-mail.outlook.com'  # SMTP server
 EMAIL_PORT = 587  # SMTP port
-EMAIL_USER = ''
+EMAIL_USER = ''  # Your email address
 EMAIL_PASSWORD = ''  # Your email password
 RECIPIENTS = ["zhhlbaw2011@gmail.com", "liu555yang@gmail.com"]  # Recipient email address ["zhhlbaw2011@gmail.com", "hzhou55@asu.edu"]
 
@@ -26,8 +26,8 @@ NUM_MONTHS_TO_FETCH = 4
 API_SCHEDULE = 1 #Call api every {} minutes
 
 #WebAutomation file configs
-FILE_PATH_SELENIUM = r"C:\Users\zhhlb\OneDrive\桌面"
-FILE_NAME_PREFIX_SELENIUM = "VisaDates-Selenium"
+FILE_PATH_SELENIUM = r'C:\Users\zhhlb\OneDrive\桌面'
+FILE_NAME_PREFIX_SELENIUM = 'VisaDates-Selenium'
 
 #WebAutomation chrome driver configs
 CHROME_DRIVER_PATH = r'E:\pys\wangyi_web_crawler\ChromeDriver\chromedriver.exe'

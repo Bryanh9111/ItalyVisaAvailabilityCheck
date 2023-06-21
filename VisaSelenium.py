@@ -35,6 +35,7 @@ class BrowserAutomator:
         except Exception as e:
             print(f"Exception occurred while trying to navigate to {url}: {e}")
             self.logger.error(f"Exception occurred while trying to navigate to {url}: {e}")
+            raise
 
     # Click an element on the webpage
     def click_element(self, element_type, element_identifier, wait_time=15):
@@ -48,6 +49,7 @@ class BrowserAutomator:
         except TimeoutException as e:
             print("Timeout Exception! Element not found or page took too long to load.")
             self.logger.error(f"Timeout Exception! Element not found or page took too long to load: {e}")
+            raise
 
     # Click Checkbox on the webpage
     def check_checkbox(self, element_type, element_identifier, wait_time=10, clickEnter=False):
@@ -63,6 +65,7 @@ class BrowserAutomator:
         except TimeoutException as e:
             print("Timeout Exception! Element not found or page took too long to load.")
             self.logger.error(f"Timeout Exception! Element not found or page took too long to load: {e}")
+            raise
 
     # Click an element on the webpage
     def send_keys_to_element(self, element_type, element_identifier, keys, wait_time=15, clickEnter=False):
@@ -79,6 +82,7 @@ class BrowserAutomator:
         except TimeoutException as e:
             print("Timeout Exception! Element not found or page took too long to load.")
             self.logger.error(f"Timeout Exception! Element not found or page took too long to load: {e}")
+            raise
 
     # Accept the Alert box on the webpage
     def accept_alert(self, wait_time=10):
@@ -92,6 +96,7 @@ class BrowserAutomator:
         except NoAlertPresentException as e:
             print("No Alert Present Exception! No alert is currently present.")
             self.logger.error(f"No Alert Present Exception: {e}")
+            raise
 
     #Close the browser instance connection
     def close_browser(self, seconds):
@@ -170,26 +175,29 @@ class ScheduleJob:
             self.browser.check_checkbox(By.ID, 'PrivacyCheck', 80, clickEnter=True)
             self.browser.accept_alert()
             cookies = self.browser.get_all_cookies()
-            cookie_to_send = ''
             if (len(cookies) > 0):
                 cookie_to_send = "; ".join([f'{cookie["name"]}={cookie["value"]}' for cookie in reversed(cookies)])
-
-            if (len(cookie_to_send) > 0):
                 cookie_to_send = cookie_to_send.strip()
                 self.redis_publisher.send_message(REDIS_CHANNEL, {'cookie': cookie_to_send})
+            else:
+                self.redis_publisher.send_message('visa_channel', {'cookie': '-1'})
 
             print(f'next run time: {datetime.now() + timedelta(minutes=interval) + timedelta(seconds=15)}')
             self.browser.close_browser(15)
-
         except Exception as e:
             print(f"An error occurred while running job: {e}")
             self.logger.error(f"An error occurred while running job: {e}")
+            self.redis_publisher.send_message(REDIS_CHANNEL, {'cookie': '-1'})
+            if self.browser:
+                self.browser.close_browser(10)
+            time.sleep(60)
+            self.run()
 
     # running the job in a timely manner
     def run(self):
         #generate a randon interval between 15 - 25
         interval = random.randint(18, 25)
-        self.job(interval);
+        self.job(interval)
         #schedule.every(interval).minutes.do(self.job)
         schedule.every(interval).minutes.do(lambda: self.job(interval))
         while True:

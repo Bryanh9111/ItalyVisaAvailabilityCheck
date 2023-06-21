@@ -56,7 +56,9 @@ class VisaAvailability:
                     #cookie = cookie.decode('utf-8')
                     if cookie:
                         print('Cookie received!!!!')
-                        self.headers['Cookie'] = cookie
+                        if(cookie == '-1'):
+                            print(f'Cookie: {cookie}')
+                        self.headers['Cookie'] = '' if cookie == '-1' else cookie
         except Exception as e:
             print(f"An error occurred while update_cookie_from_redis: {e}")
             self.logger.error(f"An error occurred while update_cookie_from_redis: {e}")

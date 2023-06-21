@@ -1,4 +1,13 @@
 # config.py
+import json
+
+# Load Credentials
+def load_credentials():
+    with open('VisaAvailabilityCheckCredentials.json', 'r') as file:
+        credentials = json.load(file)
+    return credentials
+
+CREDENTIALS = load_credentials()
 
 #Redis configs
 REDIS_HOST = 'localhost'
@@ -14,8 +23,8 @@ DELETE_FILE_IN_DAYS = 1
 #Email configs
 EMAIL_SERVER = 'smtp-mail.outlook.com'  # SMTP server
 EMAIL_PORT = 587  # SMTP port
-EMAIL_USER = ''  # Your email address
-EMAIL_PASSWORD = ''  # Your email password
+EMAIL_USER = CREDENTIALS["EMAIL_USER"]  # Your email address "zhhlbaw2011@outlook.com"  ""zhhlbaw2016@outlook.com""
+EMAIL_PASSWORD = CREDENTIALS["EMAIL_PASSWORD"]  # Your email password
 RECIPIENTS = ["zhhlbaw2011@gmail.com", "liu555yang@gmail.com"]  # Recipient email address ["zhhlbaw2011@gmail.com", "hzhou55@asu.edu"]
 
 #API configs
@@ -34,5 +43,5 @@ CHROME_DRIVER_PATH = r'E:\pys\wangyi_web_crawler\ChromeDriver\chromedriver.exe'
 
 #WebAutomation configs
 NAVIGATION_URL = 'https://prenotami.esteri.it/'
-USER_NAME = ''
-PASSWORD = ''
+USER_NAME = CREDENTIALS["USER_NAME"]
+PASSWORD = CREDENTIALS["PASSWORD"]

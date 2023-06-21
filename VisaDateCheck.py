@@ -131,6 +131,7 @@ class VisaAvailability:
                 print(f"An error occurred while get_availability: {e}")
                 self.logger.error(f"An error occurred while get_availability: {e}")
                 self.exceptionLst.append(f"An error occurred while get_availability: {e}")
+                self.headers['Cookie'] = ''
 
         # for key, value in self.memo.items():
         #     print(f"{key}: {value}")
@@ -141,6 +142,7 @@ class VisaAvailability:
         if(len(self.exceptionLst) > 0):
             message = "\n".join(self.exceptionLst)
             self.emailLocal.send_email(f"{message}")
+            self.exceptionLst = []
 
 
 class FileLocal:

@@ -1,3 +1,4 @@
+# Importing required modules
 import requests
 import os
 import glob
@@ -13,12 +14,15 @@ from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+# Importing configurations
 from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_CHANNEL
 from config import FILE_PATH, FILE_NAME_PREFIX, DELETE_FILE_IN_DAYS
 from config import API_URL, USER_AGENT, SERVICE_ID, NUM_MONTHS_TO_FETCH, API_SCHEDULE
 from config import EMAIL_SERVER, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD, RECIPIENTS
 
+
 class VisaAvailability:
+    # Initialize VisaAvailability
     def __init__(self, url, headers, service_id, num_months, filePath, fileNamePrefix, fileSuffix, email_server, email_port, email_user, email_password, recipient_emails):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.url = url
@@ -39,9 +43,10 @@ class VisaAvailability:
         self.redis_thread.daemon = True
         self.redis_thread.start()
 
-        #a memo dic for sending notification email
+        #Create a memo dic for record sending notification email count
         self.memo = {}
 
+    # Redis Subscriber update latest cookie
     def update_cookie_from_redis(self):
         try:
             while True:
@@ -56,6 +61,7 @@ class VisaAvailability:
             print(f"An error occurred while update_cookie_from_redis: {e}")
             self.logger.error(f"An error occurred while update_cookie_from_redis: {e}")
 
+    #Generate params for API call
     def get_parameters(self):
         try:
             today = datetime.today()
@@ -75,17 +81,21 @@ class VisaAvailability:
             self.logger.error(f"An error occurred while get_parameters: {e}")
             return []
 
-
+    # Main logic here, check the Italy visa availability
     def get_availability(self, params):
         print('-' * 60)
+        # No cookie received, no need to run
         if(len(self.headers['Cookie']) == 0):
             print(f"Cookie is empty!")
             self.logger.info(f"Cookie is empty!")
             return
 
+        # For sending email use
         messageLst = []
+
         with open(rf'{self.filePath}\{self.fileNamePrefix}-{self.fileSuffix}.txt', 'a',encoding='utf8') as f:
             f.write(f"{'-' * 30}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{'-' * 30}" + '\n')
+
         for param in params:
             try:
                 date_string = param["selectedDay"]
@@ -132,11 +142,13 @@ class VisaAvailability:
 
 
 class FileLocal:
+    # Initialize FileLocal
     def __init__(self, filePath, fileNamePrefix):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.filePath = filePath
         self.fileNamePrefix = fileNamePrefix
 
+    # Get the creation date of a file
     def creation_date(self, path_to_file):
         if platform.system() == 'Windows':
             return os.path.getctime(path_to_file)
@@ -147,6 +159,7 @@ class FileLocal:
             except AttributeError:
                 return stat.st_mtime
 
+    # Delete old files
     def clean_old_files(self, days=1):
         days_ago = datetime.now() - timedelta(days=days)
         try:
@@ -163,8 +176,8 @@ class FileLocal:
             self.logger.error(f"An error occurred while cleaning old files: {e}")
 
 
-
 class EmailLocal:
+    # Initialize EmailLocal
     def __init__(self, email_server, email_port, email_user, email_password, recipient_emails):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.email_server = email_server
@@ -173,6 +186,7 @@ class EmailLocal:
         self.email_password = email_password
         self.recipient_emails = recipient_emails
 
+    # Sending email
     def send_email(self, message):
         msg = MIMEMultipart()
         msg['From'] = self.email_user
@@ -201,6 +215,7 @@ class EmailLocal:
 
 
 class RedisReceiver:
+    # Initialize RedisReceiver
     def __init__(self, host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         try:
@@ -210,6 +225,7 @@ class RedisReceiver:
             print("Cannot connect to Redis server. Please make sure the server is running and the host and port are correct.")
             self.logger.error(f"An error occurred: {e}")
 
+    # Subscribe to a channel to receive message
     def receive_message(self, channel):
         try:
             pubsub = self.r.pubsub()
@@ -230,21 +246,21 @@ class RedisReceiver:
 
 
 if __name__ == "__main__":
-    # declare all global variables
+    # Initialize global variables
     filePath = FILE_PATH
     fileNamePrefix = FILE_NAME_PREFIX
     fileSuffix = date.today().strftime("%Y-%m-%d")
 
-    #delete old files
+    #Delete old files
     fileLocal = FileLocal(filePath, fileNamePrefix)
     fileLocal.clean_old_files(days=DELETE_FILE_IN_DAYS)
 
-    # Configuring the logger
+    # Configure the logger
     logging.basicConfig(filename=rf'{filePath}\{fileNamePrefix}-log-{fileSuffix}.log',
                         level=logging.DEBUG,
                         format='%(asctime)s %(message)s')
 
-    #api config
+    #API config
     url = API_URL
     headers = {
         'Cookie': '',
@@ -253,18 +269,18 @@ if __name__ == "__main__":
     service_id = SERVICE_ID
     num_months = NUM_MONTHS_TO_FETCH
 
-    # email configuration here
+    # Email configuration
     email_server = EMAIL_SERVER  # SMTP server
     email_port = EMAIL_PORT  # SMTP port
     email_user = EMAIL_USER  # Your email address "zhhlbaw2011@outlook.com"  ""zhhlbaw2016@outlook.com""
     email_password = EMAIL_PASSWORD  # Your email password
     recipient_emails = RECIPIENTS  # Recipient email address ["zhhlbaw2011@gmail.com", "hzhou55@asu.edu"]
 
-    #initialize class
+    #Initialize VisaAvailability class
     visaAvailability = VisaAvailability(url, headers, service_id, num_months, filePath, fileNamePrefix, fileSuffix, email_server, email_port, email_user, email_password, recipient_emails)
     params = visaAvailability.get_parameters()
 
-    # Schedule the get_availability method to be called every minute
+    # Schedule the get_availability method to be called every {API_SCHEDULE} minute
     #schedule.every(1).minutes.do(visaAvailability.get_availability)
     schedule.every(API_SCHEDULE).minutes.do(lambda: visaAvailability.get_availability(params))
 

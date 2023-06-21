@@ -14,8 +14,8 @@ DELETE_FILE_IN_DAYS = 1
 #Email configs
 EMAIL_SERVER = "smtp-mail.outlook.com"  # SMTP server
 EMAIL_PORT = 587  # SMTP port
-EMAIL_USER = ""  # Your email address "zhhlbaw2011@outlook.com"  ""zhhlbaw2016@outlook.com""
-EMAIL_PASSWORD = ""  # Your email password
+EMAIL_USER = ''
+EMAIL_PASSWORD = ''  # Your email password
 RECIPIENTS = ["zhhlbaw2011@gmail.com", "liu555yang@gmail.com"]  # Recipient email address ["zhhlbaw2011@gmail.com", "hzhou55@asu.edu"]
 
 #API configs

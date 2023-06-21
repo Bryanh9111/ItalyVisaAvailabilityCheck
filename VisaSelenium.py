@@ -1,3 +1,4 @@
+# Importing required modules
 import requests
 import schedule
 import time
@@ -14,16 +15,20 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, NoAlertPresentException
 from selenium.webdriver.common.alert import Alert
 from datetime import datetime, timedelta, date
+# Importing configurations
 from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_CHANNEL
 from config import FILE_PATH_SELENIUM, FILE_NAME_PREFIX_SELENIUM
 from config import CHROME_DRIVER_PATH
 from config import NAVIGATION_URL, USER_NAME, PASSWORD
 
+
 class BrowserAutomator:
+    # Initialize browser automator with a driver path
     def __init__(self, driver_path):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.driver = webdriver.Chrome(executable_path=driver_path)
 
+    # Navigate to a specified URL
     def navigate_to_page(self, url):
         try:
             self.driver.get(url)
@@ -31,6 +36,7 @@ class BrowserAutomator:
             print(f"Exception occurred while trying to navigate to {url}: {e}")
             self.logger.error(f"Exception occurred while trying to navigate to {url}: {e}")
 
+    # Click an element on the webpage
     def click_element(self, element_type, element_identifier, wait_time=15):
         try:
             element = WebDriverWait(self.driver, wait_time).until(
@@ -43,6 +49,7 @@ class BrowserAutomator:
             print("Timeout Exception! Element not found or page took too long to load.")
             self.logger.error(f"Timeout Exception! Element not found or page took too long to load: {e}")
 
+    # Click Checkbox on the webpage
     def check_checkbox(self, element_type, element_identifier, wait_time=10, clickEnter=False):
         try:
             checkbox = WebDriverWait(self.driver, wait_time).until(EC.presence_of_element_located((element_type, element_identifier)))
@@ -57,6 +64,7 @@ class BrowserAutomator:
             print("Timeout Exception! Element not found or page took too long to load.")
             self.logger.error(f"Timeout Exception! Element not found or page took too long to load: {e}")
 
+    # Click an element on the webpage
     def send_keys_to_element(self, element_type, element_identifier, keys, wait_time=15, clickEnter=False):
         try:
             element = WebDriverWait(self.driver, wait_time).until(
@@ -72,6 +80,7 @@ class BrowserAutomator:
             print("Timeout Exception! Element not found or page took too long to load.")
             self.logger.error(f"Timeout Exception! Element not found or page took too long to load: {e}")
 
+    # Accept the Alert box on the webpage
     def accept_alert(self, wait_time=10):
         try:
             WebDriverWait(self.driver, wait_time).until(EC.alert_is_present())
@@ -84,20 +93,23 @@ class BrowserAutomator:
             print("No Alert Present Exception! No alert is currently present.")
             self.logger.error(f"No Alert Present Exception: {e}")
 
+    #Close the browser instance connection
     def close_browser(self, seconds):
         time.sleep(20)
         self.driver.quit()
 
+    #Get all the cookies from request header
     def get_all_cookies(self):
         return self.driver.get_cookies()
 
 
-
 class APIClient:
+    # Initialize API client with a base URL
     def __init__(self, base_url):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.base_url = base_url
 
+    # Get cookies from a specified endpoint
     def get_cookies(self, endpoint):
         try:
             response = requests.get(self.base_url + endpoint, timeout=10)
@@ -114,8 +126,8 @@ class APIClient:
         return response.cookies
 
 
-
 class RedisPublisher:
+    # Initialize RedisPublisher
     def __init__(self, host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         try:
@@ -126,6 +138,7 @@ class RedisPublisher:
             self.logger.error(f"An error occurred: {e}")
             raise
 
+    # Publisher
     def send_message(self, channel, message):
         try:
             message_json = json.dumps(message)
@@ -137,12 +150,14 @@ class RedisPublisher:
 
 
 class ScheduleJob:
+    # Initialize ScheduleJob with chromedriver
     def __init__(self, redis_publisher: RedisPublisher, driver_path):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         #self.browser = browser
         self.redis_publisher = redis_publisher
         self.driver_path = driver_path
 
+    # Create web automation job for running
     def job(self, interval):
         try:
             self.logger.info(f'job started: {datetime.now()}')
@@ -170,6 +185,7 @@ class ScheduleJob:
             print(f"An error occurred while running job: {e}")
             self.logger.error(f"An error occurred while running job: {e}")
 
+    # running the job in a timely manner
     def run(self):
         #generate a randon interval between 15 - 25
         interval = random.randint(18, 25)
@@ -182,19 +198,25 @@ class ScheduleJob:
 
 
 if __name__ == "__main__":
-    # declare all global variables
+    # Initialize global variables
     filePath = FILE_PATH_SELENIUM
     fileNamePrefix = FILE_NAME_PREFIX_SELENIUM
     fileSuffix = date.today().strftime("%Y-%m-%d")
 
-    # Configuring the logger
+    # Configure the logger
     logging.basicConfig(filename=rf'{filePath}\{fileNamePrefix}-log-{fileSuffix}.log',
                         level=logging.DEBUG,
                         format='%(asctime)s %(message)s')
 
     #browser = BrowserAutomator(CHROME_DRIVER_PATH)
+
+    # Create an instance of RedisPublisher
     redis_publisher = RedisPublisher()
+
+    # Create an instance of ScheduleJob
     scheduled_job = ScheduleJob(redis_publisher, CHROME_DRIVER_PATH)
+
+    # Run the scheduled job
     scheduled_job.run()
 
 

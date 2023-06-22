@@ -18,12 +18,12 @@ from email.mime.text import MIMEText
 from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_COOKIE_CHANNEL, REDIS_TIME_CHANNEL
 from config import FILE_PATH, FILE_NAME_PREFIX, DELETE_FILE_IN_DAYS
 from config import API_URL, USER_AGENT, SERVICE_ID, NUM_MONTHS_TO_FETCH, API_SCHEDULE
-from config import EMAIL_SERVER, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD, RECIPIENTS
+from config import EMAIL_SERVER, EMAIL_PORT, EMAIL_USER, EMAIL_PASSWORD, RECIPIENTS, EXCEPTION_RECIPIENTS
 
 
 class VisaAvailability:
     # Initialize VisaAvailability
-    def __init__(self, url, headers, service_id, num_months, filePath, fileNamePrefix, fileSuffix, email_server, email_port, email_user, email_password, recipient_emails):
+    def __init__(self, url, headers, service_id, num_months, filePath, fileNamePrefix, fileSuffix, email_server, email_port, email_user, email_password, recipient_emails, exception_recipient_emails):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.url = url
         self.headers = headers
@@ -32,7 +32,7 @@ class VisaAvailability:
         self.filePath = filePath
         self.fileNamePrefix = fileNamePrefix
         self.fileSuffix = fileSuffix
-        self.emailLocal = EmailLocal(email_server, email_port, email_user, email_password, recipient_emails)
+        self.emailLocal = EmailLocal(email_server, email_port, email_user, email_password, recipient_emails, exception_recipient_emails)
         self.exceptionLst = []
         #self.session = requests.Session()
         self.next_run_time_str = ''
@@ -157,10 +157,10 @@ class VisaAvailability:
 
         if(len(messageLst) > 0):
             message = "\n".join(messageLst)
-            self.emailLocal.send_email(f"{message}")
+            self.emailLocal.send_email(f"{message}", False)
         if(len(self.exceptionLst) > 0):
             message = "\n".join(self.exceptionLst)
-            self.emailLocal.send_email(f"{message}")
+            self.emailLocal.send_email(f"{message}", True)
             self.exceptionLst = []
 
 
@@ -201,19 +201,20 @@ class FileLocal:
 
 class EmailLocal:
     # Initialize EmailLocal
-    def __init__(self, email_server, email_port, email_user, email_password, recipient_emails):
+    def __init__(self, email_server, email_port, email_user, email_password, recipient_emails, exception_recipient_emails):
         self.logger = logging.getLogger(__name__ + '.' + self.__class__.__name__)
         self.email_server = email_server
         self.email_port = email_port
         self.email_user = email_user
         self.email_password = email_password
         self.recipient_emails = recipient_emails
+        self.exception_recipient_emails = exception_recipient_emails
 
     # Sending email
-    def send_email(self, message):
+    def send_email(self, message, isException):
         msg = MIMEMultipart()
         msg['From'] = self.email_user
-        msg['To'] = ", ".join(self.recipient_emails)
+        msg['To'] = ", ".join(self.exception_recipient_emails) if isException else ", ".join(self.recipient_emails)
         msg['Subject'] = "Visa Availability Notification"
         msg.attach(MIMEText(message, 'plain'))
 
@@ -222,7 +223,10 @@ class EmailLocal:
             server.starttls()
             server.login(self.email_user, self.email_password)
             text = msg.as_string()
-            server.sendmail(self.email_user, self.recipient_emails, text)
+            if isException:
+                server.sendmail(self.email_user, self.exception_recipient_emails, text)
+            else:
+                server.sendmail(self.email_user, self.recipient_emails, text)
             server.quit()
         except Exception as e:
             print(f"An error occurred while sending email: {e}")
@@ -300,9 +304,10 @@ if __name__ == "__main__":
     email_user = EMAIL_USER  # Your email address "zhhlbaw2011@outlook.com"  ""zhhlbaw2016@outlook.com""
     email_password = EMAIL_PASSWORD  # Your email password
     recipient_emails = RECIPIENTS  # Recipient email address ["zhhlbaw2011@gmail.com", "hzhou55@asu.edu"]
+    exception_recipient_emails = EXCEPTION_RECIPIENTS
 
     #Initialize VisaAvailability class
-    visaAvailability = VisaAvailability(url, headers, service_id, num_months, filePath, fileNamePrefix, fileSuffix, email_server, email_port, email_user, email_password, recipient_emails)
+    visaAvailability = VisaAvailability(url, headers, service_id, num_months, filePath, fileNamePrefix, fileSuffix, email_server, email_port, email_user, email_password, recipient_emails, exception_recipient_emails)
     params = visaAvailability.get_parameters()
 
     # Schedule the get_availability method to be called every {API_SCHEDULE} minute

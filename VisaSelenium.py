@@ -101,7 +101,7 @@ class BrowserAutomator:
 
     #Close the browser instance connection
     def close_browser(self, seconds):
-        time.sleep(20)
+        time.sleep(seconds)
         try:
             self.driver.quit()
         except Exception as e:
